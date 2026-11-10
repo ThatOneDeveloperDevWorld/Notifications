@@ -28,7 +28,6 @@
             border-radius: 8px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.2s;
         }
         button:active {
             background-color: #0056b3;
@@ -52,39 +51,57 @@
         const button = document.getElementById('notifyBtn');
         const statusText = document.getElementById('status');
 
+        // Register a Service Worker immediately (Required for Android Chrome)
+        let swRegistration = null;
+        if ('serviceWorker' in navigator) {
+            const swCode = `self.addEventListener('notificationclick', e => e.notification.close());`;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+
+            navigator.serviceWorker.register(swUrl).then(reg => {
+                swRegistration = reg;
+            }).catch(err => {
+                console.error('Service Worker registration failed:', err);
+            });
+        }
+
         button.addEventListener('click', async () => {
-            // Check if the browser supports notifications
             if (!("Notification" in window)) {
-                alert("This browser does not support notifications.");
+                statusText.textContent = "This browser does not support notifications.";
                 return;
             }
 
-            // Request permission from the user
             let permission = Notification.permission;
-            
             if (permission !== "granted") {
                 permission = await Notification.requestPermission();
             }
 
             if (permission === "granted") {
-                statusText.textContent = "Notification sent!";
-                
-                // On mobile Android browsers, Service Workers are typically required 
-                // for background pushes, but standard Notifications work if the tab is open.
+                statusText.textContent = "Sending notification...";
+
+                const title = "Test Notification!";
                 const options = {
                     body: "This is a test to check your notification sound.",
                     icon: "https://devworld.run.place/woym.png",
                     badge: "https://devworld.run.place/woym.png"
                 };
 
-                // Use Service Worker registration if available (best practice for Android Chrome)
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.ready.then(registration => {
-                        registration.showNotification("Test Notification!", options);
-                    });
+                // Use Service Worker notification (required for mobile)
+                if (swRegistration) {
+                    try {
+                        await swRegistration.showNotification(title, options);
+                        statusText.textContent = "Notification sent!";
+                    } catch (err) {
+                        statusText.textContent = "Error: " + err.message;
+                    }
                 } else {
-                    // Fallback to standard web notification
-                    new Notification("Test Notification!", options);
+                    // Fallback for desktop browsers
+                    try {
+                        new Notification(title, options);
+                        statusText.textContent = "Notification sent!";
+                    } catch (err) {
+                        statusText.textContent = "Service worker loading... try clicking again in a second.";
+                    }
                 }
             } else {
                 statusText.textContent = "Notification permission denied.";
